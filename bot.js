@@ -6,6 +6,22 @@ const { createCanvas, loadImage, registerFont } = require('canvas');
 const puppeteer = require('puppeteer');
 require('dotenv').config();
 
+// Story Game imports (JSON-based)
+const {
+    getActiveStory,
+    addWordToStory,
+    completeStory,
+    resetStory,
+    getStory,
+    formatStoryText
+} = require('./models/story');
+const { scoreStory } = require('./services/ai-rater');
+
+// Story Game Config
+const STORY_CHANNELS = process.env.STORY_CHANNELS ? process.env.STORY_CHANNELS.split(',').map(id => id.trim()) : [];
+const MIN_WORDS_FOR_COMPLETION = parseInt(process.env.MIN_WORDS_FOR_COMPLETION || '3');
+const MAX_WORDS_PER_STORY = parseInt(process.env.MAX_WORDS_PER_STORY || '20');
+
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds,
@@ -2527,6 +2543,102 @@ client.on('messageCreate', async (message) => {
     if (!message.guild) return;
 
     try {
+        // ===== STORY GAME HANDLER (One-Word Collaborative Story) =====
+        if (STORY_CHANNELS.includes(message.channelId)) {
+            // Check: message hanya 1 kata & bukan command
+            const words = message.content.trim().split(/\s+/);
+            
+            if (words.length === 1 && !message.content.startsWith(PREFIX)) {
+                const word = words[0];
+                
+                // Validate: word hitung sebagai valid jika > 1 karakter & bukan angka semua
+                if (word.length < 2 || /^\d+$/.test(word)) {
+                    return; // Skip invalid words
+                }
+                
+                try {
+                    // Get atau create story untuk channel ini
+                    const story = getActiveStory(message.guildId, message.channelId);
+                    
+                    // Add word ke story
+                    const updatedStory = addWordToStory(
+                        message.guildId,
+                        message.channelId,
+                        word,
+                        message.author.id,
+                        message.author.username
+                    );
+                    
+                    if (!updatedStory) {
+                        return;
+                    }
+                    
+                    // React ✅ untuk indicate accepted
+                    await message.react('✅').catch(() => {});
+                    
+                    // Show current story
+                    const storyText = formatStoryText(updatedStory);
+                    const wordCount = updatedStory.words.length;
+                    
+                    // Auto-send current story setiap 3 kata
+                    if (wordCount % 3 === 0) {
+                        const storyEmbed = new EmbedBuilder()
+                            .setColor('#7B68EE')
+                            .setTitle('📖 Current Story')
+                            .setDescription(`*${storyText}...*`)
+                            .setFooter({ text: `Words: ${wordCount} | Contributors: ${Object.keys(updatedStory.contributors).length}` })
+                            .setTimestamp();
+                        
+                        await message.channel.send({ embeds: [storyEmbed] }).catch(() => {});
+                    }
+                    
+                    // AUTO-COMPLETE CERITA jika reach maximum words
+                    if (wordCount >= MAX_WORDS_PER_STORY) {
+                        // Score & rate cerita
+                        const scoreResult = await scoreStory(updatedStory);
+                        
+                        // Complete cerita
+                        const completedStory = completeStory(
+                            message.guildId,
+                            message.channelId,
+                            scoreResult.rating,
+                            scoreResult.comment
+                        );
+                        
+                        // Create contributor list
+                        const contributors = Object.entries(updatedStory.contributors)
+                            .sort(([, a], [, b]) => b - a) // Sort by count
+                            .map(([userId, count]) => `<@${userId}> (${count} word${count > 1 ? 's' : ''})`)
+                            .join('\n');
+                        
+                        // Display hasil cerita
+                        const resultEmbed = new EmbedBuilder()
+                            .setColor('#FFD700')
+                            .setTitle('🎉 Cerita Selesai!')
+                            .setDescription(`**"${scoreResult.storyText}"**`)
+                            .addFields(
+                                { name: '📊 Stats', value: `Words: ${scoreResult.wordCount}\nContributors: ${scoreResult.contributorCount}`, inline: true },
+                                { name: '⭐ Rating', value: `${scoreResult.rating}/10 (${scoreResult.source})`, inline: true },
+                                { name: '💬 AI Comment', value: scoreResult.comment, inline: false },
+                                { name: '👥 Contributors', value: contributors || 'None', inline: false }
+                            )
+                            .setTimestamp();
+                        
+                        await message.channel.send({ embeds: [resultEmbed] });
+                        
+                        // Reset untuk story baru
+                        resetStory(message.guildId, message.channelId);
+                        console.log(`✅ Story completed & reset for guild ${message.guildId}, channel ${message.channelId}`);
+                    }
+                    
+                    return; // Skip other handlers
+                    
+                } catch (error) {
+                    console.error('Error in story game:', error);
+                }
+            }
+        }
+
         // Handle prefix commands
         if (message.content.startsWith(PREFIX)) {
             const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
