@@ -2303,6 +2303,179 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton()) {
+        // Handle RPS challenge buttons
+        if (interaction.customId.startsWith('rps_')) {
+            try {
+                const parts = interaction.customId.split('_');
+                const playerType = parts[1]; // 'challenger' or 'opponent'
+                const choice = parts[2]; // 'rock', 'paper', or 'scissors'
+                const challengeId = parts.slice(3).join('_');
+                
+                if (!client.rpsChallenge || !client.rpsChallenge.has(challengeId)) {
+                    return await interaction.reply({
+                        content: '❌ Challenge sudah expired atau tidak ada!',
+                        flags: 64,
+                        ephemeral: true
+                    });
+                }
+
+                const challenge = client.rpsChallenge.get(challengeId);
+                const choiceEmojis = { rock: '🪨', paper: '📄', scissors: '✂️' };
+
+                // CASE 1: Challenger clicking
+                if (playerType === 'challenger') {
+                    // Check if user is the challenger
+                    if (interaction.user.id !== challenge.challenger) {
+                        return await interaction.reply({
+                            content: '❌ Hanya challenger yang bisa klik!',
+                            flags: 64,
+                            ephemeral: true
+                        });
+                    }
+
+                    // Check if challenger already chose
+                    if (challenge.challenger_choice) {
+                        return await interaction.reply({
+                            content: '❌ Kamu sudah memilih!',
+                            flags: 64,
+                            ephemeral: true
+                        });
+                    }
+
+                    // Set challenger choice
+                    challenge.challenger_choice = choice;
+
+                    // Create new embed - waiting for opponent
+                    const waitingEmbed = new EmbedBuilder()
+                        .setColor('#FFAA00')
+                        .setTitle('🎮 Rock Paper Scissors Challenge!')
+                        .setDescription(`${challenge.challenger_name} sudah pilih!\n\n${challenge.opponent_name}, sekarang giliran kamu:`)
+                        .addFields(
+                            { name: 'Challenger', value: challenge.challenger_name, inline: true },
+                            { name: 'Opponent', value: challenge.opponent_name, inline: true },
+                            { name: 'Status', value: `⏳ Waiting for ${challenge.opponent_name}...`, inline: false }
+                        )
+                        .setFooter({ text: 'Timeout: 120 detik' })
+                        .setTimestamp();
+
+                    // Create buttons for opponent
+                    const opponentRockBtn = new ButtonBuilder()
+                        .setCustomId(`rps_opponent_rock_${challengeId}`)
+                        .setLabel('Rock')
+                        .setEmoji('🪨')
+                        .setStyle(ButtonStyle.Primary);
+
+                    const opponentPaperBtn = new ButtonBuilder()
+                        .setCustomId(`rps_opponent_paper_${challengeId}`)
+                        .setLabel('Paper')
+                        .setEmoji('📄')
+                        .setStyle(ButtonStyle.Primary);
+
+                    const opponentScissorsBtn = new ButtonBuilder()
+                        .setCustomId(`rps_opponent_scissors_${challengeId}`)
+                        .setLabel('Scissors')
+                        .setEmoji('✂️')
+                        .setStyle(ButtonStyle.Primary);
+
+                    const opponentButtonRow = new ActionRowBuilder().addComponents(opponentRockBtn, opponentPaperBtn, opponentScissorsBtn);
+
+                    // Update message
+                    await interaction.message.edit({ 
+                        embeds: [waitingEmbed],
+                        components: [opponentButtonRow]
+                    });
+
+                    await interaction.deferUpdate();
+                }
+
+                // CASE 2: Opponent clicking
+                else if (playerType === 'opponent') {
+                    // Check if user is the opponent
+                    if (interaction.user.id !== challenge.opponent) {
+                        return await interaction.reply({
+                            content: '❌ Hanya opponent yang bisa klik!',
+                            flags: 64,
+                            ephemeral: true
+                        });
+                    }
+
+                    // Check if opponent already chose
+                    if (challenge.opponent_choice) {
+                        return await interaction.reply({
+                            content: '❌ Kamu sudah memilih!',
+                            flags: 64,
+                            ephemeral: true
+                        });
+                    }
+
+                    // Check if challenger chose
+                    if (!challenge.challenger_choice) {
+                        return await interaction.reply({
+                            content: '❌ Challenger belum pilih!',
+                            flags: 64,
+                            ephemeral: true
+                        });
+                    }
+
+                    // Set opponent choice
+                    challenge.opponent_choice = choice;
+
+                    const challengerChoice = challenge.challenger_choice;
+                    const opponentChoice = choice;
+
+                    // Determine winner
+                    let result = '';
+                    let winner = '';
+
+                    if (challengerChoice === opponentChoice) {
+                        result = '🤝 Draw!';
+                        winner = 'draw';
+                    } else if (
+                        (challengerChoice === 'rock' && opponentChoice === 'scissors') ||
+                        (challengerChoice === 'paper' && opponentChoice === 'rock') ||
+                        (challengerChoice === 'scissors' && opponentChoice === 'paper')
+                    ) {
+                        result = `🎉 ${challenge.challenger_name} Wins!`;
+                        winner = 'challenger';
+                    } else {
+                        result = `🎉 ${challenge.opponent_name} Wins!`;
+                        winner = 'opponent';
+                    }
+
+                    // Create result embed
+                    const resultEmbed = new EmbedBuilder()
+                        .setColor(winner === 'draw' ? '#FFAA00' : '#00FF00')
+                        .setTitle('🎮 Rock Paper Scissors Result!')
+                        .addFields(
+                            { name: challenge.challenger_name, value: `${choiceEmojis[challengerChoice]} \`${challengerChoice}\`` , inline: true },
+                            { name: challenge.opponent_name, value: `${choiceEmojis[opponentChoice]} \`${opponentChoice}\`` , inline: true },
+                            { name: 'Result', value: result, inline: false }
+                        )
+                        .setTimestamp();
+
+                    // Update message
+                    await interaction.message.edit({ 
+                        embeds: [resultEmbed],
+                        components: []
+                    });
+
+                    // Delete challenge from active list
+                    client.rpsChallenge.delete(challengeId);
+
+                    await interaction.deferUpdate();
+                }
+
+            } catch (error) {
+                console.error('Error handling RPS button:', error);
+                await interaction.reply({
+                    content: `❌ Error: ${error.message}`,
+                    flags: 64,
+                    ephemeral: true
+                }).catch(() => {});
+            }
+            return;
+        }
+
         if (interaction.customId === 'embed_send') {
             try {
                 const embeds = client.embeds || new Map();
@@ -2851,41 +3024,375 @@ client.on('messageCreate', async (message) => {
                 }
             }
 
+            // fam.rps - Rock Paper Scissors game (vs bot or vs user)
+            else if (command === 'rps') {
+                try {
+                    const choices = ['rock', 'paper', 'scissors'];
+                    const opponent = message.mentions.users.first();
+
+                    // Initialize challenge storage
+                    if (!client.rpsChallenge) {
+                        client.rpsChallenge = new Map();
+                    }
+
+                    // Case 1: Challenge another user (fam.rps @user)
+                    if (opponent && !opponent.bot) {
+                        // Check if challenge already exist
+                        const challengeId = `${message.author.id}-${opponent.id}-${message.channelId}`;
+                        if (client.rpsChallenge.has(challengeId)) {
+                            return message.reply({
+                                content: `❌ Sudah ada challenge aktif untuk user ini! Tunggu response atau match selesai.`,
+                                flags: 64
+                            });
+                        }
+
+                        // Create challenge embed - User A pilih dulu
+                        const challengeEmbed = new EmbedBuilder()
+                            .setColor('#00D9FF')
+                            .setTitle('🎮 Rock Paper Scissors Challenge!')
+                            .setDescription(`${message.author}, pilih salah satu:`)
+                            .addFields(
+                                { name: 'Challenger', value: message.author.username, inline: true },
+                                { name: 'Opponent', value: opponent.username, inline: true },
+                                { name: 'Status', value: `⏳ Waiting for ${message.author.username}...`, inline: false }
+                            )
+                            .setFooter({ text: 'Timeout: 120 detik' })
+                            .setTimestamp();
+
+                        // Create buttons for challenger
+                        const rockBtn = new ButtonBuilder()
+                            .setCustomId(`rps_challenger_rock_${challengeId}`)
+                            .setLabel('Rock')
+                            .setEmoji('🪨')
+                            .setStyle(ButtonStyle.Primary);
+
+                        const paperBtn = new ButtonBuilder()
+                            .setCustomId(`rps_challenger_paper_${challengeId}`)
+                            .setLabel('Paper')
+                            .setEmoji('📄')
+                            .setStyle(ButtonStyle.Primary);
+
+                        const scissorsBtn = new ButtonBuilder()
+                            .setCustomId(`rps_challenger_scissors_${challengeId}`)
+                            .setLabel('Scissors')
+                            .setEmoji('✂️')
+                            .setStyle(ButtonStyle.Primary);
+
+                        const buttonRow = new ActionRowBuilder().addComponents(rockBtn, paperBtn, scissorsBtn);
+
+                        const challengeMsg = await message.reply({ 
+                            embeds: [challengeEmbed],
+                            components: [buttonRow]
+                        });
+
+                        // Store challenge
+                        client.rpsChallenge.set(challengeId, {
+                            challenger: message.author.id,
+                            challenger_name: message.author.username,
+                            opponent: opponent.id,
+                            opponent_name: opponent.username,
+                            channelId: message.channelId,
+                            messageId: challengeMsg.id,
+                            challenger_choice: null,
+                            opponent_choice: null,
+                            started_at: Date.now()
+                        });
+
+                        // Auto cleanup setelah 120 detik jika tidak ada response
+                        setTimeout(() => {
+                            if (client.rpsChallenge.has(challengeId)) {
+                                const challenge = client.rpsChallenge.get(challengeId);
+                                if (!challenge.challenger_choice || !challenge.opponent_choice) {
+                                    client.rpsChallenge.delete(challengeId);
+                                    challengeMsg.edit({ 
+                                        components: [],
+                                        embeds: [new EmbedBuilder()
+                                            .setColor('#FF0000')
+                                            .setTitle('❌ Challenge Expired')
+                                            .setDescription('Salah satu player tidak respond in time!')
+                                            .setTimestamp()
+                                        ] 
+                                    }).catch(() => {});
+                                }
+                            }
+                        }, 120000); // 120 seconds timeout
+
+                        return;
+                    }
+
+                    // Case 2: Play vs bot (fam.rps rock)
+                    const userChoice = args[1]?.toLowerCase();
+
+                    if (!userChoice || !choices.includes(userChoice)) {
+                        return message.reply({
+                            content: '❌ Gunakan: `fam.rps [rock/paper/scissors]` (vs bot)\nAtau: `fam.rps @user` (vs user)',
+                            flags: 64
+                        });
+                    }
+
+                    // Bot memilih random
+                    const botChoice = choices[Math.floor(Math.random() * choices.length)];
+
+                    // Determine winner
+                    let result = '';
+                    let winner = '';
+
+                    if (userChoice === botChoice) {
+                        result = '🤝 Draw!';
+                        winner = 'draw';
+                    } else if (
+                        (userChoice === 'rock' && botChoice === 'scissors') ||
+                        (userChoice === 'paper' && botChoice === 'rock') ||
+                        (userChoice === 'scissors' && botChoice === 'paper')
+                    ) {
+                        result = '🎉 You Win!';
+                        winner = 'user';
+                    } else {
+                        result = '❌ You Lose!';
+                        winner = 'bot';
+                    }
+
+                    // Create embed with result
+                    const rpsEmbed = new EmbedBuilder()
+                        .setColor(winner === 'user' ? '#00FF00' : (winner === 'draw' ? '#FFAA00' : '#FF0000'))
+                        .setTitle('🎮 Rock Paper Scissors (vs Bot)')
+                        .addFields(
+                            { name: '👤 Your Choice', value: `\`${userChoice}\``, inline: true },
+                            { name: '🤖 Bot Choice', value: `\`${botChoice}\``, inline: true },
+                            { name: 'Result', value: result, inline: false }
+                        )
+                        .setFooter({ text: `Played by ${message.author.username}` })
+                        .setTimestamp();
+
+                    await message.reply({ embeds: [rpsEmbed] });
+                } catch (error) {
+                    console.error('Error executing rps command:', error);
+                    await message.reply({
+                        content: `❌ Error: ${error.message}`,
+                        flags: 64
+                    });
+                }
+            }
+
+            // fam.guess - Number guessing game
+            else if (command === 'guess') {
+                try {
+                    // Initialize game storage jika belum ada
+                    if (!client.guessGames) {
+                        client.guessGames = new Map();
+                    }
+
+                    const gameId = `${message.author.id}-${message.guildId}`;
+                    const guess = parseInt(args[1]);
+
+                    // Check jika user tidak ada argument - start new game
+                    if (!args[1]) {
+                        // Check jika user sudah ada game yang running
+                        if (client.guessGames.has(gameId)) {
+                            const game = client.guessGames.get(gameId);
+                            return message.reply({
+                                content: `❌ Kamu sudah punya game yang running! Angka: ${game.number}\nGunakan: \`fam.guess [1-100]\` untuk menebak atau \`fam.guess quit\` untuk berhenti`,
+                                flags: 64
+                            });
+                        }
+
+                        // Start new game
+                        const randomNumber = Math.floor(Math.random() * 100) + 1;
+                        client.guessGames.set(gameId, {
+                            number: randomNumber,
+                            attempts: 0,
+                            startedAt: Date.now(),
+                            userId: message.author.id
+                        });
+
+                        const startEmbed = new EmbedBuilder()
+                            .setColor('#00D9FF')
+                            .setTitle('🎯 Number Guessing Game Started!')
+                            .setDescription('Aku udah ambil number antara 1-100. Coba tebak!')
+                            .addFields(
+                                { name: 'Cara Main', value: '`fam.guess [angka]` - Tebak number\n`fam.guess quit` - Keluar dari game\n`fam.guess hint` - Minta bantuan', inline: false }
+                            )
+                            .setFooter({ text: `${message.author.username}` })
+                            .setTimestamp();
+
+                        return await message.reply({ embeds: [startEmbed] });
+                    }
+
+                    // Check jika user quit
+                    if (args[1].toLowerCase() === 'quit') {
+                        if (!client.guessGames.has(gameId)) {
+                            return message.reply({
+                                content: '❌ Kamu tidak ada game yang running!',
+                                flags: 64
+                            });
+                        }
+
+                        const game = client.guessGames.get(gameId);
+                        client.guessGames.delete(gameId);
+
+                        const quitEmbed = new EmbedBuilder()
+                            .setColor('#FF6600')
+                            .setTitle('🎯 Game Ended')
+                            .setDescription(`Angkanya adalah: **${game.number}**`)
+                            .addFields(
+                                { name: 'Attempts', value: `${game.attempts}`, inline: true }
+                            )
+                            .setTimestamp();
+
+                        return await message.reply({ embeds: [quitEmbed] });
+                    }
+
+                    // Check jika user minta hint
+                    if (args[1].toLowerCase() === 'hint') {
+                        if (!client.guessGames.has(gameId)) {
+                            return message.reply({
+                                content: '❌ Kamu tidak ada game yang running! Mulai dengan `fam.guess`',
+                                flags: 64
+                            });
+                        }
+
+                        const game = client.guessGames.get(gameId);
+                        const num = game.number;
+                        let hint = '';
+
+                        if (num <= 25) hint = '🔽 Angkanya tergolong **LOW** (1-25)';
+                        else if (num <= 50) hint = '⬇️ Angkanya tergolong **MEDIUM-LOW** (26-50)';
+                        else if (num <= 75) hint = '⬆️ Angkanya tergolong **MEDIUM-HIGH** (51-75)';
+                        else hint = '🔼 Angkanya tergolong **HIGH** (76-100)';
+
+                        const hintEmbed = new EmbedBuilder()
+                            .setColor('#FFD700')
+                            .setTitle('💡 Hint')
+                            .setDescription(hint)
+                            .setTimestamp();
+
+                        return await message.reply({ embeds: [hintEmbed] });
+                    }
+
+                    // Validate input adalah number
+                    if (isNaN(guess) || guess < 1 || guess > 100) {
+                        return message.reply({
+                            content: '❌ Input harus angka antara 1-100! Contoh: `fam.guess 50`',
+                            flags: 64
+                        });
+                    }
+
+                    // Check jika user punya game running
+                    if (!client.guessGames.has(gameId)) {
+                        return message.reply({
+                            content: '❌ Kamu tidak ada game yang running! Mulai dengan `fam.guess`',
+                            flags: 64
+                        });
+                    }
+
+                    const game = client.guessGames.get(gameId);
+                    game.attempts += 1;
+
+                    let response = '';
+                    let isCorrect = false;
+                    let color = '#00D9FF';
+
+                    if (guess === game.number) {
+                        isCorrect = true;
+                        color = '#00FF00';
+                        response = `🎉 **CORRECT!** Angkanya memang **${game.number}**!\nDone dalam **${game.attempts}** attempt(s)!`;
+                        client.guessGames.delete(gameId);
+                    } else if (guess < game.number) {
+                        response = `⬆️ Angkanya **LEBIH BESAR** dari ${guess}`;
+                    } else {
+                        response = `⬇️ Angkanya **LEBIH KECIL** dari ${guess}`;
+                    }
+
+                    const guessEmbed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle('🎯 Guess')
+                        .setDescription(response)
+                        .addFields(
+                            { name: 'Your Guess', value: `${guess}`, inline: true },
+                            { name: 'Attempts', value: `${game.attempts}`, inline: true }
+                        )
+                        .setTimestamp();
+
+                    await message.reply({ embeds: [guessEmbed] });
+                } catch (error) {
+                    console.error('Error executing guess command:', error);
+                    await message.reply({
+                        content: `❌ Error: ${error.message}`,
+                        flags: 64
+                    });
+                }
+            }
+
             // fam.list - Show all prefix commands
             else if (command === 'list') {
                 try {
                     const listEmbed = new EmbedBuilder()
-                        .setColor('#808080')
-                        .setTitle('Daftar Prefix Commands')
-                        .setDescription('Semua available prefix commands:')
+                        .setColor('#5865F2')
+                        .setTitle('📚 Prefix Commands List')
+                        .setDescription('Gunakan `fam.[command]` untuk menjalankan command\n\n')
                         .addFields(
+                            // ===== ROLE MANAGEMENT =====
+                            {
+                                name: '👑 ROLE MANAGEMENT',
+                                value: '─────────────────',
+                                inline: false
+                            },
                             { 
-                                name: 'fam.roleicon [ID/mention/nama]', 
-                                value: 'Tampilkan info role dengan berbagai cara input\nContoh: `fam.roleicon @VIP` atau `fam.roleicon VIP`', 
+                                name: '🎨 fam.roleicon [ID/mention/nama]', 
+                                value: 'Set role icon dari image\n**Contoh:** `fam.roleicon @VIP` atau `fam.roleicon VIP`\n**Perlu:** Attachment/reply ke image', 
                                 inline: false 
                             },
                             { 
-                                name: 'fam.inrole [ID/mention/nama]', 
-                                value: 'Tampilkan list members dalam role (max 10)\nContoh: `fam.inrole @VIP` atau `fam.inrole VIP`', 
+                                name: '👥 fam.inrole [ID/mention/nama]', 
+                                value: 'List members dalam role (max 10)\n**Contoh:** `fam.inrole @VIP` atau `fam.inrole VIP`', 
                                 inline: false 
                             },
                             { 
-                                name: 'fam.createrole [name] [color1] [color2]', 
-                                value: 'Buat role baru dengan gradient\nContoh: `fam.createrole VIP #FF0000 #0000FF`\nPerlu: ManageRoles permission', 
+                                name: '✨ fam.createrole [name] [color1] [color2]', 
+                                value: 'Buat role baru dengan gradient colors\n**Contoh:** `fam.createrole VIP #FF0000 #0000FF`\n**Perlu:** ManageRoles permission', 
+                                inline: false 
+                            },
+                            // ===== IMAGE TOOLS =====
+                            {
+                                name: '🖼️  IMAGE TOOLS',
+                                value: '─────────────────',
+                                inline: false
+                            },
+                            { 
+                                name: '🎯 fam.removebg', 
+                                value: 'Remove background dari gambar\n**Contoh:** `fam.removebg` (with attachment/reply)', 
+                                inline: false 
+                            },
+                            // ===== MINI GAMES =====
+                            {
+                                name: '🎮 MINI GAMES',
+                                value: '─────────────────',
+                                inline: false
+                            },
+                            { 
+                                name: '✂️  fam.rps [pilihan] / fam.rps @user', 
+                                value: 'Rock Paper Scissors\n**vs Bot:** `fam.rps rock` / `fam.rps paper` / `fam.rps scissors`\n**vs User:** `fam.rps @user` → keduanya klik button', 
                                 inline: false 
                             },
                             { 
-                                name: 'fam.removebg', 
-                                value: 'Remove background dari gambar pakai remove.bg API\nContoh: Upload gambar → `fam.removebg` atau reply ke image → `fam.removebg`', 
+                                name: '🎲 fam.guess [angka/hint/quit]', 
+                                value: 'Guessing Number Game (1-100)\n**Start:** `fam.guess`\n**Guess:** `fam.guess 50`\n**Hint:** `fam.guess hint`\n**Stop:** `fam.guess quit`', 
                                 inline: false 
                             },
+                            // ===== UTILITY =====
+                            {
+                                name: '⚙️  UTILITY',
+                                value: '─────────────────',
+                                inline: false
+                            },
                             { 
-                                name: 'fam.list', 
-                                value: 'Tampilkan list semua commands', 
+                                name: '📋 fam.list', 
+                                value: 'Tampilkan list ini', 
                                 inline: false 
                             }
                         )
-                        .setFooter({ text: 'Gunakan fam.[command] untuk menjalankan command' });
+                        .setFooter({ text: '💡 Tip: Gunakan command tanpa argument untuk help!', iconURL: message.author.displayAvatarURL() })
+                        .setTimestamp();
 
                     await message.reply({ embeds: [listEmbed] });
                 } catch (error) {
