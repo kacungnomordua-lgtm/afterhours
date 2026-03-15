@@ -741,7 +741,7 @@ async function startTebakAngkaRound(client, game, gameId) {
             .map(([id, attempts]) => {
                 const player = game.players.get(id);
                 const pointsEarned = Math.max(1, 11 - attempts);
-                return `@${player.name} menebak angka yang benar, ${game.number} dan mendapatkan ${pointsEarned} point!`;
+                return `<@${id}> menebak angka yang benar, **${game.number}** dan mendapatkan **${pointsEarned}** point!`;
             })
             .join('\n');
 
