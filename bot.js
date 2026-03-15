@@ -741,7 +741,7 @@ async function startTebakAngkaRound(client, game, gameId) {
             .map(([id, attempts]) => {
                 const player = game.players.get(id);
                 const pointsEarned = Math.max(1, 11 - attempts);
-                return `<@${id}> menebak angka yang benar, **${game.number}** dan mendapatkan **${pointsEarned}** point!`;
+                return `<@${id}> menebak angka yang benar: **${game.number}** dan mendapatkan **${pointsEarned}** point!`;
             })
             .join('\n');
 
@@ -2469,7 +2469,7 @@ client.on('interactionCreate', async (interaction) => {
                         .map((entry, i) => {
                             const [userId, player] = entry;
                             const isCreator = i === 0 ? ' 👑' : '';
-                            return `@${player.name}${isCreator}`;
+                            return `<@${userId}>${isCreator}`;
                         })
                         .join('\n') || 'Belum ada players';
 
@@ -2478,9 +2478,9 @@ client.on('interactionCreate', async (interaction) => {
                         .setTitle('🎲 Tebak Angka!')
                         .addFields(
                             { name: `**Player List [${game.players.size}]**`, value: playerList, inline: false },
-                            { name: `**🔄 Total Round**`, value: `**${game.totalRounds}**`, inline: false },
-                            { name: `**🎯 Game otomatis dimulai setelah 60 detik**`, value: '\u200b', inline: false }
-                        );
+                            { name: `**🔄 Total Round**`, value: `**${game.totalRounds}**`, inline: false }
+                        )
+                        .setFooter({ text: 'Game otomatis akan dimulai dalam 60 detik' });
 
                     const gameChannel = await client.channels.fetch(gameId);
                     const lobbyMsg = await gameChannel.messages.fetch(game.lobbyMessageId);
@@ -3564,10 +3564,10 @@ client.on('messageCreate', async (message) => {
                         .setColor('#5865F2')
                         .setTitle('🎲 Tebak Angka!')
                         .addFields(
-                            { name: `**Player List [1]**`, value: `@${message.author.username} 👑`, inline: false },
-                            { name: `**🔄 Total Round**`, value: `**${totalRounds}**`, inline: false },
-                            { name: `**🎯 Game otomatis dimulai setelah 60 detik**`, value: '\u200b', inline: false }
-                        );
+                            { name: `**Player List [1]**`, value: `<@${message.author.id}> 👑`, inline: false },
+                            { name: `**🔄 Total Round**`, value: `**${totalRounds}**`, inline: false }
+                        )
+                        .setFooter({ text: 'Game otomatis akan dimulai dalam 60 detik' });
 
                     // Create buttons
                     const joinBtn = new ButtonBuilder()
