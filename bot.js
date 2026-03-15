@@ -2475,14 +2475,10 @@ client.on('interactionCreate', async (interaction) => {
                         .setTimestamp();
 
                     const gameChannel = await client.channels.fetch(gameId);
-                    const lobbyMsg = await gameChannel.messages.fetch(game.messageId);
+                    const lobbyMsg = await gameChannel.messages.fetch(game.lobbyMessageId);
                     await lobbyMsg.edit({ embeds: [updatedEmbed] });
 
-                    await interaction.reply({
-                        content: `✅ Berhasil join! Total players: ${game.players.size}`,
-                        flags: 64,
-                        ephemeral: true
-                    });
+                    await interaction.deferUpdate();
                 }
 
                 // START button
@@ -2534,7 +2530,7 @@ client.on('interactionCreate', async (interaction) => {
                     client.tebakangkaGames.delete(gameId);
                     
                     const gameChannel = await client.channels.fetch(gameId);
-                    const lobbyMsg = await gameChannel.messages.fetch(game.messageId);
+                    const lobbyMsg = await gameChannel.messages.fetch(game.lobbyMessageId);
                     
                     const exitEmbed = new EmbedBuilder()
                         .setColor('#FF0000')
@@ -3009,7 +3005,7 @@ client.on('messageCreate', async (message) => {
         if (client.tebakangkaGames && client.tebakangkaGames.has(message.channelId) && !message.content.startsWith(PREFIX)) {
             const game = client.tebakangkaGames.get(message.channelId);
             
-            if (game.status === 'running' && game.players.has(message.author.id) && message.id === game.gameMessageId) {
+            if (game.status === 'running' && game.players.has(message.author.id)) {
                 const guess = parseInt(message.content.trim());
                 
                 if (!isNaN(guess) && guess >= 1 && guess <= 100) {
@@ -3571,22 +3567,12 @@ client.on('messageCreate', async (message) => {
                         .setLabel('Start')
                         .setStyle(ButtonStyle.Primary);
 
-                    const turnBtn = new ButtonBuilder()
-                        .setCustomId(`tebakangka_turn_${gameId}`)
-                        .setLabel('Turn Based: OFF')
-                        .setStyle(ButtonStyle.Secondary);
-
-                    const botBtn = new ButtonBuilder()
-                        .setCustomId(`tebakangka_bot_${gameId}`)
-                        .setLabel('Add Bot')
-                        .setStyle(ButtonStyle.Secondary);
-
                     const exitBtn = new ButtonBuilder()
                         .setCustomId(`tebakangka_exit_${gameId}`)
                         .setLabel('Exit')
                         .setStyle(ButtonStyle.Danger);
 
-                    const buttonRow = new ActionRowBuilder().addComponents(joinBtn, startBtn, turnBtn, botBtn, exitBtn);
+                    const buttonRow = new ActionRowBuilder().addComponents(joinBtn, startBtn, exitBtn);
 
                     const lobbyMsg = await message.reply({ 
                         embeds: [lobbyEmbed],
