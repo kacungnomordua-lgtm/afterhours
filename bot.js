@@ -778,7 +778,7 @@ async function startTebakAngkaRound(client, game, gameId) {
             const medals = ['🥇', '🥈', '🥉'];
             const leaderboardText = sortedPlayers.map((entry, i) => {
                 const [id, player] = entry;
-                return `${medals[i] || '🏅'} @${player.name}: ${player.points} points`;
+                return `${medals[i] || '🏅'} <@${id}>: ${player.points} points`;
             }).join('\n');
 
             const leaderboardEmbed = new EmbedBuilder()
@@ -2566,7 +2566,7 @@ client.on('interactionCreate', async (interaction) => {
                     const medals = ['🥇', '🥈', '🥉'];
                     const leaderboardText = sortedPlayers.map((entry, i) => {
                         const [id, player] = entry;
-                        return `${medals[i] || '🏅'} @${player.name}: ${player.points} points`;
+                        return `${medals[i] || '🏅'} <@${id}>: ${player.points} points`;
                     }).join('\n');
 
                     const forceExitEmbed = new EmbedBuilder()
