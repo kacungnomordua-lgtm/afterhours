@@ -681,22 +681,31 @@ function scheduleGiveawayEnd(giveawayId) {
 async function startTebakAngkaRound(client, game, gameId) {
     try {
         const gameChannel = await client.channels.fetch(gameId);
-        const lobbyMsg = await gameChannel.messages.fetch(game.messageId);
 
-        // Create round embed
-        const roundEmbed = new EmbedBuilder()
+        // Create detailed game instruction message
+        const gameEmbed = new EmbedBuilder()
             .setColor('#5865F2')
-            .setTitle(`🎲 Tebak Angka! - Round ${game.currentRound}/${game.totalRounds}`)
-            .setDescription(`Aku udah ambil angka antara 1-100!\n\nKalian punya **${game.timePerRound} detik** dan **10 kesempatan** untuk menebak!\n\nKirim angka aja (misal: \`50\`)`)
+            .setTitle('🎲 Tebak Angka!')
+            .setDescription(`Tebak angka antara 1 sampai 100!\n\n**Clue:**\n🔼 = Angka lebih besar dari tebakanmu\n🔽 = Angka lebih kecil dari tebakanmu\n❌ = Kesempatan menebak sudah habis\n\nKamu punya 10x kesempatan menebak.\nPoint disesuaikan dengan jumlah percobaan.`)
             .addFields(
-                { name: '👥 Players', value: Array.from(game.players.values()).map(p => `${p.name}: ${p.points}pt`).join('\n'), inline: false },
-                { name: '⏳ Waktu Tersisa', value: `${game.timePerRound}s`, inline: true },
-                { name: '🎯 Angka', value: '?', inline: true }
+                { name: `Round ${game.currentRound}/${game.totalRounds}`, value: '━'.repeat(20), inline: false },
+                { name: 'Waktu menjawab', value: `${game.timePerRound} detik.`, inline: false }
             )
-            .setFooter({ text: `Kesempatan: 10/10` })
             .setTimestamp();
 
-        await lobbyMsg.edit({ embeds: [roundEmbed], components: [] });
+        const forceExitBtn = new ButtonBuilder()
+            .setCustomId(`tebakangka_force_exit_${gameId}`)
+            .setLabel('Force Exit')
+            .setStyle(ButtonStyle.Danger);
+
+        const buttonRow = new ActionRowBuilder().addComponents(forceExitBtn);
+
+        const gameMsg = await gameChannel.send({ 
+            embeds: [gameEmbed],
+            components: [buttonRow]
+        });
+
+        game.gameMessageId = gameMsg.id;
 
         // Reset round attempts
         for (const playerId of game.players.keys()) {
@@ -708,7 +717,7 @@ async function startTebakAngkaRound(client, game, gameId) {
         let correctPlayers = new Set();
 
         // Countdown timer
-        const timerInterval = setInterval(() => {
+        const timerInterval = setInterval(async () => {
             timeLeft--;
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
@@ -723,40 +732,48 @@ async function startTebakAngkaRound(client, game, gameId) {
 
         clearInterval(timerInterval);
 
+        // Build result text
+        const correctList = Array.from(correctPlayers).map(id => {
+            const player = game.players.get(id);
+            const attempts = game.roundAttempts.get(id) || 0;
+            return `@${player.name} menebak angka yang benar, 📍 dan mendapatkan 5 point!`;
+        }).join('\n') || 'Tidak ada yang benar';
+
         // Reveal answer & show results
         const resultEmbed = new EmbedBuilder()
             .setColor('#FFD700')
-            .setTitle(`🎲 Tebak Angka! - Round ${game.currentRound}/${game.totalRounds} Selesai`)
-            .setDescription(`**Angkanya adalah: ${game.number}**`)
+            .setTitle('🎲 Tebak Angka!')
+            .setDescription(`@${Array.from(correctPlayers).map(id => game.players.get(id).name).join(' dan @') || 'Tidak ada'} menebak angka yang benar, ${correctPlayers.size > 0 ? '📍' : '❌'} dan mendapatkan ${correctPlayers.size > 0 ? '5' : '0'} point!`)
             .addFields(
-                { name: '✅ Benar', value: correctPlayers.size > 0 ? Array.from(correctPlayers).map(id => game.players.get(id).name).join(', ') : 'Tidak ada', inline: true },
-                { name: '❌ Salah', value: Array.from(game.players.keys()).filter(id => !correctPlayers.has(id)).map(id => game.players.get(id).name).join(', ') || 'Tidak ada', inline: true }
-            )
-            .addFields(
-                { name: '📊 Skor', value: Array.from(game.players.entries()).map(([id, p]) => `${p.name}: ${p.points}pt`).join('\n'), inline: false }
+                { name: `Round ${game.currentRound}/${game.totalRounds}`, value: correctPlayers.size > 0 ? 'Game Over!' : 'Lanjut ke round berikutnya', inline: false }
             )
             .setTimestamp();
 
-        await lobbyMsg.edit({ embeds: [resultEmbed] });
+        await gameMsg.edit({ embeds: [resultEmbed], components: [] });
+
+        // Update player scores
+        for (const playerId of correctPlayers) {
+            game.players.get(playerId).points += 5;
+        }
 
         // Move to next round or end game
         if (game.currentRound < game.totalRounds) {
             game.currentRound++;
             game.number = Math.floor(Math.random() * 100) + 1;
             
-            // Wait 5 seconds before next round
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // Wait 3 seconds before next round
+            await new Promise(resolve => setTimeout(resolve, 3000));
             
             await startTebakAngkaRound(client, game, gameId);
         } else {
-            // Game ended - show leaderboard
+            // Game ended - show leaderboard in new message
             const sortedPlayers = Array.from(game.players.entries())
                 .sort((a, b) => b[1].points - a[1].points);
 
             const medals = ['🥇', '🥈', '🥉'];
             const leaderboardText = sortedPlayers.map((entry, i) => {
                 const [id, player] = entry;
-                return `${medals[i] || '🏅'} **${player.name}**: ${player.points} points`;
+                return `${medals[i] || '🏅'} @${player.name}: ${player.points} points`;
             }).join('\n');
 
             const leaderboardEmbed = new EmbedBuilder()
@@ -766,7 +783,7 @@ async function startTebakAngkaRound(client, game, gameId) {
                 .setFooter({ text: 'Tebak Angka' })
                 .setTimestamp();
 
-            await lobbyMsg.edit({ embeds: [leaderboardEmbed], components: [] });
+            await gameChannel.send({ embeds: [leaderboardEmbed] });
             
             game.status = 'ended';
             client.tebakangkaGames.delete(gameId);
@@ -2495,9 +2512,20 @@ client.on('interactionCreate', async (interaction) => {
                         game.roundAttempts.set(playerId, 0);
                     }
 
+                    // Update lobby message to show "Game dimulai!"
+                    const gameStartEmbed = new EmbedBuilder()
+                        .setColor('#00FF00')
+                        .setTitle('🎲 Tebak Angka!')
+                        .setDescription('Game dimulai!')
+                        .setTimestamp();
+
+                    const gameChannel = await client.channels.fetch(gameId);
+                    const lobbyMsg = await gameChannel.messages.fetch(game.lobbyMessageId);
+                    await lobbyMsg.edit({ embeds: [gameStartEmbed], components: [] });
+
                     await interaction.deferUpdate();
 
-                    // Start game loop
+                    // Start game with separate message
                     await startTebakAngkaRound(client, game, gameId);
                 }
 
@@ -2518,6 +2546,42 @@ client.on('interactionCreate', async (interaction) => {
                     
                     await interaction.reply({
                         content: '✅ Game dibatalkan',
+                        flags: 64,
+                        ephemeral: true
+                    });
+                }
+
+                // FORCE EXIT button (during game)
+                else if (action === 'force') {
+                    const gameChannel = await client.channels.fetch(gameId);
+                    
+                    // End game and show leaderboard
+                    const sortedPlayers = Array.from(game.players.entries())
+                        .sort((a, b) => b[1].points - a[1].points);
+
+                    const medals = ['🥇', '🥈', '🥉'];
+                    const leaderboardText = sortedPlayers.map((entry, i) => {
+                        const [id, player] = entry;
+                        return `${medals[i] || '🏅'} @${player.name}: ${player.points} points`;
+                    }).join('\n');
+
+                    const forceExitEmbed = new EmbedBuilder()
+                        .setColor('#FF8800')
+                        .setTitle('⚠️ Game Dihentikan')
+                        .setDescription(`Game dihentikan oleh ${interaction.user.username}`)
+                        .addFields(
+                            { name: '🏆 Final Leaderboard', value: leaderboardText, inline: false }
+                        )
+                        .setFooter({ text: 'Jalankan `fam.tebakangka` untuk game baru!' })
+                        .setTimestamp();
+
+                    const gameMsg = await gameChannel.messages.fetch(game.gameMessageId);
+                    await gameMsg.edit({ embeds: [forceExitEmbed], components: [] });
+
+                    client.tebakangkaGames.delete(gameId);
+
+                    await interaction.reply({
+                        content: '✅ Game dihentikan!',
                         flags: 64,
                         ephemeral: true
                     });
@@ -2945,7 +3009,7 @@ client.on('messageCreate', async (message) => {
         if (client.tebakangkaGames && client.tebakangkaGames.has(message.channelId) && !message.content.startsWith(PREFIX)) {
             const game = client.tebakangkaGames.get(message.channelId);
             
-            if (game.status === 'running' && game.players.has(message.author.id)) {
+            if (game.status === 'running' && game.players.has(message.author.id) && message.id === game.gameMessageId) {
                 const guess = parseInt(message.content.trim());
                 
                 if (!isNaN(guess) && guess >= 1 && guess <= 100) {
@@ -2957,7 +3021,7 @@ client.on('messageCreate', async (message) => {
                         if (guess === game.number) {
                             // Correct guess!
                             await message.react('✅');
-                            game.players.get(message.author.id).points += 1;
+                            game.players.get(message.author.id).points += 5;
                         } else if (guess < game.number) {
                             // Too small
                             await message.react('🔼');
@@ -3490,11 +3554,10 @@ client.on('messageCreate', async (message) => {
                         .setDescription(`Tebak angka dalam beberapa kesempatan dengan poin di tiap ronde!`)
                         .addFields(
                             { name: '👥 Player List [0]', value: 'Belum ada players', inline: false },
-                            { name: '⏱️ Waktu per Ronde', value: `${timePerRound} detik`, inline: true },
                             { name: '🔄 Total Ronde', value: `${totalRounds}`, inline: true },
-                            { name: 'Kesempatan Tebak', value: '10x per ronde', inline: true }
+                            { name: '⏱️ Auto Start', value: `Setelah 60 detik`, inline: true }
                         )
-                        .setFooter({ text: 'Tekan tombol di bawah untuk start' })
+                        .setFooter({ text: 'Tekan tombol di bawah untuk join dan start' })
                         .setTimestamp();
 
                     // Create buttons
@@ -3510,7 +3573,7 @@ client.on('messageCreate', async (message) => {
 
                     const turnBtn = new ButtonBuilder()
                         .setCustomId(`tebakangka_turn_${gameId}`)
-                        .setLabel('Turn Based')
+                        .setLabel('Turn Based: OFF')
                         .setStyle(ButtonStyle.Secondary);
 
                     const botBtn = new ButtonBuilder()
@@ -3533,7 +3596,8 @@ client.on('messageCreate', async (message) => {
                     // Store game state
                     client.tebakangkaGames.set(gameId, {
                         channelId: message.channelId,
-                        messageId: lobbyMsg.id,
+                        lobbyMessageId: lobbyMsg.id,
+                        gameMessageId: null, // Will be set when game starts
                         players: new Map(), // userId -> {name, points}
                         status: 'lobby', // lobby, running, ended
                         currentRound: 0,
@@ -3545,7 +3609,39 @@ client.on('messageCreate', async (message) => {
                         createdAt: Date.now()
                     });
 
-                } catch (error) {
+                    // Auto-start after 60 seconds if not started
+                    setTimeout(async () => {
+                        if (client.tebakangkaGames.has(gameId)) {
+                            const game = client.tebakangkaGames.get(gameId);
+                            if (game.status === 'lobby' && game.players.size > 0) {
+                                // Auto-start
+                                game.status = 'running';
+                                game.currentRound = 1;
+                                game.number = Math.floor(Math.random() * 100) + 1;
+                                
+                                for (const playerId of game.players.keys()) {
+                                    game.roundAttempts.set(playerId, 0);
+                                }
+
+                                const gameStartEmbed = new EmbedBuilder()
+                                    .setColor('#00FF00')
+                                    .setTitle('🎲 Tebak Angka!')
+                                    .setDescription('Game dimulai!')
+                                    .setTimestamp();
+
+                                try {
+                                    const gameChannel = await client.channels.fetch(gameId);
+                                    const lobbyMessage = await gameChannel.messages.fetch(lobbyMsg.id);
+                                    await lobbyMessage.edit({ embeds: [gameStartEmbed], components: [] });
+
+                                    // Start game with separate message
+                                    await startTebakAngkaRound(client, game, gameId);
+                                } catch (e) {
+                                    console.error('Error auto-starting game:', e);
+                                }
+                            }
+                        }
+                    }, 60000);                } catch (error) {
                     console.error('Error executing tebakangka command:', error);
                     await message.reply({
                         content: `❌ Error: ${error.message}`,
