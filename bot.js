@@ -2468,22 +2468,19 @@ client.on('interactionCreate', async (interaction) => {
                     const playerList = Array.from(game.players.entries())
                         .map((entry, i) => {
                             const [userId, player] = entry;
-                            const isMention = userId === game.players.values().next().value?.id || i === 0 ? ' 👑' : '';
-                            return `@${player.name}${userId === interaction.user.id ? '' : isMention}`;
+                            const isCreator = i === 0 ? ' 👑' : '';
+                            return `@${player.name}${isCreator}`;
                         })
                         .join('\n') || 'Belum ada players';
 
                     const updatedEmbed = new EmbedBuilder()
                         .setColor('#5865F2')
                         .setTitle('🎲 Tebak Angka!')
-                        .setDescription('Tebak angka dalam beberapa kesempatan dengan poin di tiap ronde!')
                         .addFields(
-                            { name: `👥 Player List [${game.players.size}]`, value: playerList, inline: false },
-                            { name: '🔄 Total Round', value: `${game.totalRounds}`, inline: true },
-                            { name: '⏱️ Auto Start', value: `Setelah 60 detik`, inline: true }
-                        )
-                        .setFooter({ text: 'Game otomatis dimulai setelah 60 detik' })
-                        .setTimestamp();
+                            { name: `Player List [${game.players.size}]`, value: playerList, inline: false },
+                            { name: '🔄 Total Round', value: `${game.totalRounds}`, inline: false },
+                            { name: '🎯 Auto Start', value: `Setelah 60 detik`, inline: false }
+                        );
 
                     const gameChannel = await client.channels.fetch(gameId);
                     const lobbyMsg = await gameChannel.messages.fetch(game.lobbyMessageId);
@@ -3566,14 +3563,11 @@ client.on('messageCreate', async (message) => {
                     const lobbyEmbed = new EmbedBuilder()
                         .setColor('#5865F2')
                         .setTitle('🎲 Tebak Angka!')
-                        .setDescription(`Tebak angka dalam beberapa kesempatan dengan poin di tiap ronde!`)
                         .addFields(
-                            { name: `👥 Player List [1]`, value: `@${message.author.username} 👑`, inline: false },
-                            { name: '🔄 Total Round', value: `${totalRounds}`, inline: true },
-                            { name: '⏱️ Auto Start', value: `Setelah 60 detik`, inline: true }
-                        )
-                        .setFooter({ text: 'Game otomatis dimulai setelah 60 detik' })
-                        .setTimestamp();
+                            { name: `Player List [1]`, value: `@${message.author.username} 👑`, inline: false },
+                            { name: '🔄 Total Round', value: `${totalRounds}`, inline: false },
+                            { name: '🎯 Auto Start', value: `Setelah 60 detik`, inline: false }
+                        );
 
                     // Create buttons
                     const joinBtn = new ButtonBuilder()
