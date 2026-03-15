@@ -778,8 +778,7 @@ async function startTebakAngkaRound(client, game, gameId) {
             const medals = ['🥇', '🥈', '🥉'];
             const leaderboardText = sortedPlayers.map((entry, i) => {
                 const [id, player] = entry;
-                const crown = id === game.creatorId ? ' 👑' : '';
-                return `${medals[i] || '🏅'} @${player.name}: ${player.points} points${crown}`;
+                return `${medals[i] || '🏅'} @${player.name}: ${player.points} points`;
             }).join('\n');
 
             const leaderboardEmbed = new EmbedBuilder()
