@@ -3971,7 +3971,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             
             const joinEmbed = new EmbedBuilder()
                 .setColor('#00FF00')
-                .setDescription(`<@${newState.id}> has joined 🔊 ${voiceChannel.name}`);
+                .setDescription(`<@${newState.id}> has joined 🔊 <#${voiceChannel.id}>`);
             
             await voiceChannel.send({ embeds: [joinEmbed] });
         }
@@ -3982,7 +3982,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             
             const leaveEmbed = new EmbedBuilder()
                 .setColor('#FF0000')
-                .setDescription(`<@${newState.id}> has left 🔊 ${voiceChannel.name}`);
+                .setDescription(`<@${newState.id}> has left 🔊 <#${voiceChannel.id}>`);
             
             await voiceChannel.send({ embeds: [leaveEmbed] });
         }
